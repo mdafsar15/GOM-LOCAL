@@ -1,0 +1,12 @@
+{
+  "contractAddress": "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE",
+  "tokenId": 1,
+  "ipfs": {
+    "imageCID": "QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
+    "metadataCID": "QmahUFKpWViGyjSsv2bDWXQig2TWD6PY7tGy27KZ4DCu5L",
+    "imageURL": "http://localhost:8080/ipfs/QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
+    "metadataURL": "http://localhost:8080/ipfs/QmahUFKpWViGyjSsv2bDWXQig2TWD6PY7tGy27KZ4DCu5L"
+  },
+  "transactionHash": "0xe4a15aef429acf9b221831f894a15deff06107db2bc943d5ee3d9b9cc7cc6e2e",
+  "remainingBalance": "0.65"
+}
