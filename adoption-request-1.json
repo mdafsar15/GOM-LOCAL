@@ -2,11 +2,16 @@
   "cowId": 1,
   "farmer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   "adopter": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "price": {
+    "inr": 400,
+    "matic": "24.922118380062305",
+    "exchangeRate": 16.05
+  },
   "ipfs": {
     "imageCID": "QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
-    "metadataCID": "QmajEwMLE669J1b8NfUvoTeZphaz2d2u89rWSHTAKd5NQx",
-    "imageURL": "https://ipfs.io/ipfs/QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
-    "metadataURL": "https://ipfs.io/ipfs/QmajEwMLE669J1b8NfUvoTeZphaz2d2u89rWSHTAKd5NQx"
+    "metadataCID": "Qmbjem93fUNF9SiJUdpjC79YHmU2zEpbUtSZf2SYGdSiFX",
+    "imageURL": "http://localhost:8080/ipfs/QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
+    "metadataURL": "http://localhost:8080/ipfs/Qmbjem93fUNF9SiJUdpjC79YHmU2zEpbUtSZf2SYGdSiFX"
   },
-  "transactionHash": "0x7a159dace7f34cdd0e4416d8031c2a5c65ebab93a537ecf5d41c3fc021acda72"
+  "transactionHash": "0x92d4a5774417fbf6210f366c239e494b01324f90833f1063f3e56c20dca23093"
 }
