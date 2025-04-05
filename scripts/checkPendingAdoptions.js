@@ -31,11 +31,31 @@ async function checkPendingAdoptions() {
             const priceInMatic = ethers.formatEther(cow.price);
             const priceInInr = (parseFloat(priceInMatic) * maticToInr).toFixed(2);
             
+            // Parse IPFS hash to extract image and metadata CIDs
+            let ipfsImage = "N/A";
+            let ipfsMetadata = "N/A";
+            
+            try {
+                // Assuming ipfsHash contains the metadata CID
+                const metadataResponse = await axios.get(`http://localhost:8080/ipfs/${cow.ipfsHash}`);
+                const metadata = metadataResponse.data;
+                
+                ipfsMetadata = cow.ipfsHash;
+                
+                // Extract image CID from metadata
+                if (metadata.image) {
+                    ipfsImage = metadata.image.replace('ipfs://', '');
+                }
+            } catch (error) {
+                console.error(`Error fetching IPFS data for cow ${id}:`, error.message);
+            }
+            
             pendingCows.push({
                 id: id.toString(),
                 breed: cow.breed,
                 healthStatus: cow.healthStatus,
-                ipfsHash: cow.ipfsHash,
+                IpfsImage: ipfsImage,
+                IpfsMetadata: ipfsMetadata,
                 price: `₹${priceInInr}`,
                 status: getStatusName(cow.status)
             });

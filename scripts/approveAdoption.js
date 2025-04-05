@@ -1,4 +1,28 @@
 const { ethers } = require("hardhat");
+const axios = require("axios");
+
+async function getMaticToInrRate() {
+  try {
+    const response = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=matic-network&vs_currencies=inr");
+    return response.data["matic-network"].inr;
+  } catch (error) {
+    console.error("Failed to fetch MATIC price, using fallback rate of ₹55 per MATIC");
+    return 55; // Fallback rate
+  }
+}
+
+async function depositRequiredAmount(contract, adopter, requiredMatic) {
+  const depositAmount = requiredMatic; // Already in MATIC (wei)
+  console.log(`Depositing ${ethers.formatEther(depositAmount)} MATIC to Gomini wallet...`);
+  
+  const tx = await contract.connect(adopter).depositToGominiWallet({
+    value: depositAmount
+  });
+  await tx.wait();
+  
+  console.log("Deposit successful");
+  return await contract.getGominiBalance(adopter.address);
+}
 
 async function approveAdoption(cowId) {
     try {
@@ -8,15 +32,23 @@ async function approveAdoption(cowId) {
 
         // Check cow details before approving
         const cow = await contract.getCowDetails(cowId);
+        const maticToInr = await getMaticToInrRate();
+        const priceInInr = (parseFloat(ethers.formatEther(cow.price)) * maticToInr).toFixed(2);
+        
         console.log(`Approving adoption for cow ${cowId} (${cow.breed})...`);
-        console.log(`Price: ${ethers.formatEther(cow.price)} MATIC`);
+        console.log(`Price: ${ethers.formatEther(cow.price)} MATIC (₹${priceInInr})`);
 
-        // Make sure adopter has enough balance in Gomini wallet
-        const balance = await contract.getGominiBalance(adopter.address);
+        // Check and handle Gomini wallet balance
+        let balance = await contract.getGominiBalance(adopter.address);
+        console.log(`Current Gomini balance: ${ethers.formatEther(balance)} MATIC`);
+
         if (balance < cow.price) {
-            console.log(`Adopter needs to deposit at least ${ethers.formatEther(cow.price)} MATIC`);
-            console.log("Use depositToGominiWallet() function first");
-            return;
+            const shortBy = cow.price - balance;
+            console.log(`Insufficient balance. Need additional ${ethers.formatEther(shortBy)} MATIC`);
+            
+            // Automatically deposit the required amount
+            balance = await depositRequiredAmount(contract, adopter, shortBy);
+            console.log(`New Gomini balance: ${ethers.formatEther(balance)} MATIC`);
         }
 
         console.log(`Approving adoption...`);
@@ -28,6 +60,7 @@ async function approveAdoption(cowId) {
             --------------------------------
             Cow ID: ${cowId}
             Breed: ${cow.breed}
+            Price: ₹${priceInInr} (${ethers.formatEther(cow.price)} MATIC)
             Status: Registered
             
             🔗 Transaction: https://mumbai.polygonscan.com/tx/${receipt.hash}
@@ -40,8 +73,8 @@ async function approveAdoption(cowId) {
     }
 }
 
-// Usage: npx hardhat run scripts/approveAdoption.js --network polygonMumbai
-const cowId = 5; // Change this to the cow ID you want to approve
+// Usage: npx hardhat run scripts/approveAdoption.js --network polygonMumbai <cowId>
+const cowId = process.argv[2] || 14; // Get cowId from command line or default to 13
 approveAdoption(cowId)
     .then(() => process.exit(0))
     .catch(error => {
