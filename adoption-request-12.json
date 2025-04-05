@@ -1,0 +1,17 @@
+{
+  "cowId": "12",
+  "farmer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "adopter": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "price": {
+    "inr": 400,
+    "matic": "24.906600249066006",
+    "exchangeRate": 16.06
+  },
+  "ipfs": {
+    "imageCID": "QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
+    "metadataCID": "QmSSz8weEGuTUEng7Tvo3p4oqtwEEk1R9XF7rWNgWr2Ex5",
+    "imageURL": "http://localhost:8080/ipfs/QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
+    "metadataURL": "http://localhost:8080/ipfs/QmSSz8weEGuTUEng7Tvo3p4oqtwEEk1R9XF7rWNgWr2Ex5"
+  },
+  "transactionHash": "0x4b2f93cf4265a8da1b74572d65d26ce6e794c93bc50d893c461c9ef12be55fdd"
+}

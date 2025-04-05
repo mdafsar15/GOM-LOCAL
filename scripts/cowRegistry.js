@@ -74,6 +74,31 @@ function getStatusName(statusCode) {
   return statusMap[statusCode] || "Unknown";
 }
 
+async function getCowIdFromReceipt(contract, receipt) {
+  try {
+    // Parse transaction logs to find the AdoptionRequested event
+    const event = receipt.logs.map(log => {
+      try {
+        return contract.interface.parseLog(log);
+      } catch (e) {
+        return null;
+      }
+    }).find(parsed => parsed?.name === "AdoptionRequested");
+
+    if (!event) {
+      throw new Error("AdoptionRequested event not found in transaction logs");
+    }
+
+    return event.args.cowId.toString();
+  } catch (error) {
+    console.error("Failed to parse cowId from event:", error);
+    // Fallback to checking next token ID
+    const cowId = (await contract._nextTokenId()).toString();
+    console.log("Using fallback cowId:", cowId);
+    return cowId;
+  }
+}
+
 async function main() {
   try {
     const contractAddress = "0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690";
@@ -89,7 +114,7 @@ async function main() {
     const contract = await ethers.getContractAt("FarmerCowRegistry", contractAddress);
 
     // 2. Prepare cow data - Now accepting INR as input
-    const inrAmount = 400; // ₹22 (you can make this configurable)
+    const inrAmount = 400; // ₹400
     const { maticAmount, maticInWei, exchangeRate } = await convertInrToMatic(inrAmount);
 
     const cowData = {
@@ -122,9 +147,9 @@ async function main() {
     );
     const receipt = await tx.wait();
 
-    // Get cowId from transaction
-    const cowId = 1; // Replace with actual ID from event if available
-    console.log("cowId ", cowId);
+    // 5. Get cowId from transaction
+    const cowId = await getCowIdFromReceipt(contract, receipt);
+    console.log("Generated cowId:", cowId);
 
     console.log(`
       🐄 Adoption Requested!
@@ -142,10 +167,10 @@ async function main() {
       🔗 Transaction: https://mumbai.polygonscan.com/tx/${receipt.hash}
       
       Next Step: Adopter should run:
-      npx hardhat run scripts/approveAdoption.js --network polygonMumbai
+      npx hardhat run scripts/approveAdoption.js --network polygonMumbai ${cowId}
     `);
 
-    // Save request details
+    // 6. Save request details
     const requestInfo = {
       cowId,
       farmer: farmer.address,
