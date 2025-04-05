@@ -98,10 +98,10 @@ async function main() {
     // 5. Get cowId from event
     // const event = receipt.events?.find(e => e.event === "AdoptionRequested");
     // const cowId = event?.args?.cowId?.toNumber();
-    cowId = 1;
-    console.log("cowId ", cowId);
+    // cowId = 1;
+    // console.log("cowId ", cowId);
     
-    if (!cowId) throw new Error("Could not get cow ID from transaction");
+    // if (!cowId) throw new Error("Could not get cow ID from transaction");
 
     console.log(`
       🐄 Adoption Requested!
