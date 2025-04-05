@@ -114,12 +114,12 @@ async function main() {
     const contract = await ethers.getContractAt("FarmerCowRegistry", contractAddress);
 
     // 2. Prepare cow data - Now accepting INR as input
-    const inrAmount = 200; // ₹400
+    const inrAmount = 100; // ₹400
     const { maticAmount, maticInWei, exchangeRate } = await convertInrToMatic(inrAmount);
 
     const cowData = {
       cowId: "COW-" + Date.now(),
-      breed: "Desi",
+      breed: "Noida Desi",
       birthDate: "2022-01-01",
       healthStatus: "Healthy",
       farmerTransactionId: "TX-" + Date.now(),

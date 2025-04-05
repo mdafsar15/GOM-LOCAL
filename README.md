@@ -970,3 +970,8 @@ Initialized empty Git repository in D:/NFT/gomini-03-04-2025/.git/
 
 afsar@LAPTOP-N7DVKU0K MINGW64 /d/NFT/gomini-03-04-2025 (master)
 $
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
