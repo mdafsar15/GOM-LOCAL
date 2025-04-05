@@ -54,7 +54,7 @@ async function checkPendingAdoptions() {
                 id: id.toString(),
                 breed: cow.breed,
                 healthStatus: cow.healthStatus,
-                IpfsImage: ipfsImage,
+                // IpfsImage: ipfsImage,
                 IpfsMetadata: ipfsMetadata,
                 price: `₹${priceInInr}`,
                 status: getStatusName(cow.status)
