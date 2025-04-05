@@ -1,80 +1,8 @@
-// const { ethers } = require("hardhat");
-// const { uploadToIPFS } = require("./uploadToIPFS");
-// const fs = require("fs");
-
-// async function main() {
-//   // 1. Connect to deployed contract
-//   const contractAddress = "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE"; // Your contract address
-//   const FarmerCowRegistry = await ethers.getContractFactory("FarmerCowRegistry");
-//   const contract = await FarmerCowRegistry.attach(contractAddress);
-  
-//   // 2. Prepare cow data
-//   const cowData = {
-//     breed: "Gomini",
-//     birthDate: "2022-01-01", // Will convert to timestamp
-//     healthStatus: "Healthy",
-//     farmerTransactionId: "TX-001",
-//     price: ethers.parseEther("1000") // 0.05 MATIC
-//   };
-
-//   // 3. Upload to IPFS
-//   console.log("Uploading cow image and metadata to IPFS...");
-//   const imagePath = "./cow.jpg"; // Path to your cow image
-//   const ipfsResult = await uploadToIPFS(imagePath);
-  
-//   console.log(`
-//     IPFS Upload Results:
-//     Image CID: ${ipfsResult.imageCID}
-//     Metadata CID: ${ipfsResult.metadataCID}
-//     Image URL: http://localhost:8080/ipfs/${ipfsResult.imageCID}
-//     Metadata URL: http://localhost:8080/ipfs/${ipfsResult.metadataCID}
-//   `);
-
-//   // 4. Register cow on blockchain
-//   console.log("Registering cow on blockchain...");
-//   const tx = await contract.registerCow(
-//     cowData.breed,
-//     Math.floor(new Date(cowData.birthDate)/1000), // Convert to UNIX timestamp
-//     cowData.healthStatus,
-//     ipfsResult.metadataCID, // Using metadata CID from IPFS
-//     cowData.farmerTransactionId,
-//     cowData.price
-//   );
-  
-//   const receipt = await tx.wait();
-//   console.log(`
-//     Cow registered successfully!
-//     Transaction hash: ${receipt.hash}
-//     View on Polygonscan: https://mumbai.polygonscan.com/tx/${receipt.hash}
-//   `);
-
-//   // 5. Save deployment info
-//   const deploymentInfo = {
-//     contractAddress,
-//     ipfs: {
-//       imageCID: ipfsResult.imageCID,
-//       metadataCID: ipfsResult.metadataCID,
-//       imageURL: `https://ipfs.io/ipfs/${ipfsResult.imageCID}`,
-//       metadataURL: `https://ipfs.io/ipfs/${ipfsResult.metadataCID}`
-//     },
-//     transactionHash: receipt.hash
-//   };
-
-//   fs.writeFileSync("deployment-info.json", JSON.stringify(deploymentInfo, null, 2));
-//   console.log("Deployment details saved to deployment-info.json");
-// }
-
-// main()
-//   .then(() => process.exit(0))
-//   .catch((error) => {
-//     console.error(error);
-//     process.exit(1);
-//   });
-
 const { ethers } = require("hardhat");
 const { create } = require('ipfs-http-client');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 
 // Initialize IPFS client
 const ipfs = create({
@@ -85,16 +13,14 @@ const ipfs = create({
 
 async function uploadToIPFS(filePath, cowDetails) {
   try {
-    // 1. Upload Image
     const fileContent = fs.readFileSync(filePath);
     const imageResult = await ipfs.add({
       path: path.basename(filePath),
       content: fileContent
     });
 
-    // 2. Create Metadata
     const metadata = {
-      name: `Cow ${cowDetails.cowId || path.basename(filePath).split('.')[0]}`,
+      name: `Cow ${cowDetails.cowId}`,
       description: "Registered livestock information",
       image: `ipfs://${imageResult.cid}`,
       attributes: [
@@ -104,7 +30,6 @@ async function uploadToIPFS(filePath, cowDetails) {
       ]
     };
 
-    // 3. Upload Metadata
     const metadataResult = await ipfs.add({
       path: `${cowDetails.cowId}_metadata.json`,
       content: JSON.stringify(metadata)
@@ -113,8 +38,9 @@ async function uploadToIPFS(filePath, cowDetails) {
     return {
       imageCID: imageResult.cid.toString(),
       metadataCID: metadataResult.cid.toString(),
-      imageURL: `http://localhost:8080/ipfs/${imageResult.cid}`,
-      metadataURL: `http://localhost:8080/ipfs/${metadataResult.cid}`
+      imageURL: `https://ipfs.io/ipfs/${imageResult.cid}`,
+      metadataURL: `https://ipfs.io/ipfs/${metadataResult.cid}`
+      
     };
   } catch (error) {
     console.error('IPFS upload failed:', error);
@@ -122,82 +48,93 @@ async function uploadToIPFS(filePath, cowDetails) {
   }
 }
 
-async function main() {
-  // 1. Connect to contract
-  const contractAddress = "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE";
-  const [deployer] = await ethers.getSigners();
-  const contract = await ethers.getContractAt("FarmerCowRegistry", contractAddress);
-  
-  // 2. Check current Gomini balance
-  const currentBalance = await contract.getGominiBalance(deployer.address);
-  console.log(`Current Gomini balance: ${ethers.formatEther(currentBalance)} MATIC`);
-
-  // 3. Prepare cow data (400 Rs ≈ 0.4 MATIC at current rates)
-  const cowData = {
-    cowId: "COW-001",
-    breed: "Holstein",
-    birthDate: "2022-01-01",
-    healthStatus: "Healthy",
-    farmerTransactionId: "TX-001",
-    price: ethers.parseEther("10") // 0.4 MATIC (~400 Rs)
-  };
-
-  // 4. Deposit funds if needed (10 MATIC example)
-  const depositAmount = ethers.parseEther("10");
-  if (currentBalance < depositAmount) {
-    console.log(`Depositing ${ethers.formatEther(depositAmount)} MATIC to Gomini wallet...`);
-    const depositTx = await contract.depositToGominiWallet({ value: depositAmount });
-    await depositTx.wait();
-    console.log("Deposit successful!");
-  }
-
-  // 5. Upload to IPFS
-  console.log("Uploading cow data to IPFS...");
-  const ipfsResult = await uploadToIPFS("./cow.jpg", cowData);
-  console.log(`
-    IPFS Upload Results:
-    Image CID: ${ipfsResult.imageCID}
-    Metadata CID: ${ipfsResult.metadataCID}
-    Image URL: ${ipfsResult.imageURL}
-    Metadata URL: ${ipfsResult.metadataURL}
-  `);
-
-  // 6. Register cow
-  console.log("Registering cow on blockchain...");
-  const tx = await contract.registerCow(
-    cowData.breed,
-    Math.floor(new Date(cowData.birthDate)/1000),
-    cowData.healthStatus,
-    ipfsResult.metadataCID,
-    cowData.farmerTransactionId,
-    cowData.price
-  );
-  const receipt = await tx.wait();
-  
-  console.log(`
-    Cow registered successfully!
-    Transaction hash: ${receipt.hash}
-    View on Polygonscan: https://mumbai.polygonscan.com/tx/${receipt.hash}
-  `);
-
-  // 7. Verify new balance
-  const newBalance = await contract.getGominiBalance(deployer.address);
-  console.log(`Remaining Gomini balance: ${ethers.formatEther(newBalance)} MATIC`);
-
-  // 8. Save deployment info
-  const deploymentInfo = {
-    contractAddress,
-    tokenId: 1,
-    ipfs: ipfsResult,
-    transactionHash: receipt.hash,
-    remainingBalance: ethers.formatEther(newBalance)
-  };
-  fs.writeFileSync("deployment-info.json", JSON.stringify(deploymentInfo, null, 2));
+function getStatusName(statusCode) {
+  const statusMap = ["Pending", "Approved", "Rejected", "Registered"];
+  return statusMap[statusCode] || "Unknown";
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
+async function main() {
+  try {
+    const contractAddress = "0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690";
+    
+    // 1. Get signers - ensure you have at least 2 accounts in hardhat config
+    const signers = await ethers.getSigners();
+    const farmer = signers[0];
+    const adopter = signers[1] || farmer; // Fallback to farmer if no second account
+    
+    console.log(`Farmer: ${farmer.address}`);
+    console.log(`Adopter: ${adopter.address}`);
+
+    const contract = await ethers.getContractAt("FarmerCowRegistry", contractAddress);
+
+    // 2. Prepare cow data
+    const cowData = {
+      cowId: "COW-" + Date.now(),
+      breed: "Holstein",
+      birthDate: "2022-01-01",
+      healthStatus: "Healthy",
+      farmerTransactionId: "TX-" + Date.now(),
+      price: ethers.parseEther("0.4")
+    };
+
+    // 3. Upload to IPFS
+    console.log("Uploading cow data to IPFS...");
+    const ipfsResult = await uploadToIPFS("./cow.jpg", cowData);
+    console.log("Image uploaded:", ipfsResult.imageURL);
+
+    // 4. Request adoption
+    console.log("Requesting adoption...");
+    const tx = await contract.connect(farmer).requestAdoption(
+      cowData.breed,
+      Math.floor(new Date(cowData.birthDate)/1000),
+      cowData.healthStatus,
+      ipfsResult.metadataCID,
+      cowData.farmerTransactionId,
+      cowData.price,
+      adopter.address
+    );
+    const receipt = await tx.wait();
+
+    // 5. Get cowId from event
+    // const event = receipt.events?.find(e => e.event === "AdoptionRequested");
+    // const cowId = event?.args?.cowId?.toNumber();
+    cowId = 1;
+    console.log("cowId ", cowId);
+    
+    if (!cowId) throw new Error("Could not get cow ID from transaction");
+
+    console.log(`
+      🐄 Adoption Requested!
+      --------------------------------
+      Cow ID: ${cowId}
+      Farmer: ${farmer.address}
+      Adopter: ${adopter.address}
+      Status: Pending Approval
+      
+      📌 IPFS Links:
+      Metadata: ${ipfsResult.metadataURL}
+      Image: ${ipfsResult.imageURL}
+      
+      🔗 Transaction: https://mumbai.polygonscan.com/tx/${receipt.hash}
+      
+      Next Step: Adopter should run:
+      npx hardhat run scripts/approveAdoption.js --network polygonMumbai
+    `);
+
+    // 6. Save request details
+    const requestInfo = {
+      cowId,
+      farmer: farmer.address,
+      adopter: adopter.address,
+      ipfs: ipfsResult,
+      transactionHash: receipt.hash
+    };
+    fs.writeFileSync(`adoption-request-${cowId}.json`, JSON.stringify(requestInfo, null, 2));
+
+  } catch (error) {
+    console.error("Adoption request failed:", error.message);
     process.exit(1);
-  });
+  }
+}
+
+main().then(() => process.exit(0));

@@ -2,17 +2,26 @@ const { ethers } = require("hardhat");
 
 async function main() {
   const [deployer] = await ethers.getSigners();
-
-  console.log("Deploying contracts with the account:", deployer.address);
-  console.log("Account balance:", (await ethers.provider.getBalance(deployer.address)).toString());
+  console.log("Deploying contract with account:", deployer.address);
 
   const FarmerCowRegistry = await ethers.getContractFactory("FarmerCowRegistry");
-  const farmerCowRegistry = await FarmerCowRegistry.deploy();
+  const contract = await FarmerCowRegistry.deploy();
   
   // Wait for deployment to complete
-  await farmerCowRegistry.waitForDeployment();
+  await contract.waitForDeployment();
+  
+  // Get the deployment transaction receipt
+  const deploymentTx = contract.deploymentTransaction();
+  const contractAddress = await contract.getAddress();
 
-  console.log("FarmerCowRegistry deployed to:", await farmerCowRegistry.getAddress());
+  console.log("Contract deployed to:", contractAddress);
+  console.log("Transaction hash:", deploymentTx.hash);
+
+  // Verify on Polygonscan (run separately)
+  console.log(`
+    To verify:
+    npx hardhat verify --network polygonMumbai ${contractAddress}
+  `);
 }
 
 main()

@@ -1,0 +1,12 @@
+{
+  "cowId": 1,
+  "farmer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "adopter": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "ipfs": {
+    "imageCID": "QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
+    "metadataCID": "QmUsrfsnxkRHErzCuFEPz261N7VXCpjoRb65CjSg61gc2D",
+    "imageURL": "https://ipfs.io/ipfs/QmQCc4sZEHP8s95Z5uWZDVjxVw4HbDxqrU1pqETijN5ghX",
+    "metadataURL": "https://ipfs.io/ipfs/QmUsrfsnxkRHErzCuFEPz261N7VXCpjoRb65CjSg61gc2D"
+  },
+  "transactionHash": "0x0caf5a83bc2031b9794cfe5587758801e1198b9979c988d4fcdde7b0c9fdd0d9"
+}
