@@ -1,89 +1,31 @@
+const { createClient } = require('@supabase/supabase-js');
 const { ethers } = require("hardhat");
-const axios = require("axios");
 
-async function getMaticToInrRate() {
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
+async function checkPendingRequests() {
   try {
-    const response = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=matic-network&vs_currencies=inr");
-    return response.data["matic-network"].inr;
+    const [adopter] = await ethers.getSigners();
+    
+    // Get pending requests from Supabase
+    const { data, error } = await supabase
+      .from('cows')
+      .select('*')
+      .eq('adopter_address', adopter.address)
+      .eq('status', 'Pending');
+
+    if (error) throw error;
+
+    console.log("Pending adoption requests:");
+    console.table(data);
+    return data;
   } catch (error) {
-    console.error("Failed to fetch MATIC price, using fallback rate of ₹55 per MATIC");
-    return 55; // Fallback rate
+    console.error("Error checking pending requests:", error);
+    throw error;
   }
 }
 
-async function checkPendingAdoptions() {
-    try {
-        const contractAddress = "0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690";
-        const [adopter] = await ethers.getSigners();
-        const contract = await ethers.getContractAt("FarmerCowRegistry", contractAddress);
-        
-        // Get current MATIC to INR rate
-        const maticToInr = await getMaticToInrRate();
-        console.log(`Current MATIC to INR rate: ₹${maticToInr} per MATIC`);
-        
-        const pendingIds = await contract.getPendingAdoptions(adopter.address);
-        console.log("\nPending adoption IDs:", pendingIds);
-        
-        // Get details for each pending cow
-        const pendingCows = [];
-        for (const id of pendingIds) {
-            const cow = await contract.getCowDetails(id);
-            const priceInMatic = ethers.formatEther(cow.price);
-            const priceInInr = (parseFloat(priceInMatic) * maticToInr).toFixed(2);
-            
-            // Parse IPFS hash to extract image and metadata CIDs
-            let ipfsImage = "N/A";
-            let ipfsMetadata = "N/A";
-            
-            try {
-                // Assuming ipfsHash contains the metadata CID
-                const metadataResponse = await axios.get(`http://localhost:8080/ipfs/${cow.ipfsHash}`);
-                const metadata = metadataResponse.data;
-                
-                ipfsMetadata = cow.ipfsHash;
-                
-                // Extract image CID from metadata
-                if (metadata.image) {
-                    ipfsImage = metadata.image.replace('ipfs://', '');
-                }
-            } catch (error) {
-                console.error(`Error fetching IPFS data for cow ${id}:`, error.message);
-            }
-            
-            pendingCows.push({
-                id: id.toString(),
-                breed: cow.breed,
-                healthStatus: cow.healthStatus,
-                // IpfsImage: ipfsImage,
-                IpfsMetadata: ipfsMetadata,
-                price: `₹${priceInInr}`,
-                status: getStatusName(cow.status)
-            });
-        }
-        
-        console.log("\nPending adoptions details:");
-        console.table(pendingCows);
-        
-        return pendingCows;
-    } catch (error) {
-        console.error("Error checking pending adoptions:", error);
-        throw error;
-    }
-}
-
-function getStatusName(statusCode) {
-    const statusMap = ["Pending", "Approved", "Rejected", "Registered"];
-    return statusMap[Number(statusCode)] || "Unknown";
-}
-
-// Run the function if this script is called directly
-if (require.main === module) {
-    checkPendingAdoptions()
-        .then(() => process.exit(0))
-        .catch(error => {
-            console.error(error);
-            process.exit(1);
-        });
-}
-
-module.exports = { checkPendingAdoptions };
+module.exports = { checkPendingRequests };

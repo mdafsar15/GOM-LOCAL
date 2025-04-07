@@ -66,35 +66,27 @@ async function fetchIpfsMetadata(ipfsHash) {
   }
 }
 
-async function storeCowInSupabase(cowData) {
-  const payload = {
-    id: cowData.id,
-    breed: cowData.breed,
-    health_status: cowData.healthStatus,
-    ipfs_image: cowData.ipfsImage,
-    ipfs_metadata: cowData.ipfsMetadata,
-    price_inr: cowData.priceInr,
-    price_matic: cowData.priceMatic,
-    status: cowData.status,
-    farmer_address: cowData.farmerAddress,
-    adopter_address: cowData.adopterAddress,
-    transaction_hash: cowData.transactionHash,
-    image_url: `${LOCAL_IPFS_GATEWAY}${cowData.ipfsImage}`,
-    metadata_url: `${LOCAL_IPFS_GATEWAY}${cowData.ipfsMetadata}`
+async function updateSupabaseStatus(cowId, status, transactionHash) {
+  const updateData = {
+    status: status,
+    updated_at: new Date().toISOString()
   };
+
+  if (transactionHash) {
+    updateData.transaction_hash = transactionHash;
+  }
 
   try {
     const { data, error } = await supabase
       .from('cow_registrations')
-      .upsert(payload, {
-        onConflict: 'id'
-      });
+      .update(updateData)
+      .eq('id', cowId);
 
     if (error) throw error;
-    console.log('✅ Data stored in Supabase');
+    console.log(`✅ Supabase status updated to ${status}`);
     return data;
   } catch (error) {
-    console.error('❌ Supabase Error:', error.message);
+    console.error('❌ Supabase update error:', error.message);
     throw error;
   }
 }
@@ -106,7 +98,20 @@ async function approveAdoption(cowId) {
     const [adopter] = await ethers.getSigners();
     const contract = await ethers.getContractAt("FarmerCowRegistry", contractAddress);
 
-    // 1. Get cow details
+    // 1. First verify cow exists in Supabase with Pending status
+    console.log('🔍 Checking Supabase for pending cow...');
+    const { data: cowData, error } = await supabase
+      .from('cow_registrations')
+      .select('*')
+      .eq('id', cowId)
+      .eq('status', 'Pending')
+      .single();
+
+    if (error || !cowData) {
+      throw new Error("Cow not found in Supabase or not in Pending status");
+    }
+
+    // 2. Get on-chain cow details
     const cow = await contract.getCowDetails(cowId);
     const maticToInr = await getMaticToInrRate();
     const priceInMatic = parseFloat(ethers.formatEther(cow.price));
@@ -118,11 +123,11 @@ async function approveAdoption(cowId) {
     Health: ${cow.healthStatus}
     Price: ${priceInMatic} MATIC (₹${priceInInr})`);
 
-    // 2. Check balance
+    // 3. Check balance
     let balance = await contract.getGominiBalance(adopter.address);
     console.log(`   Balance: ${ethers.formatEther(balance)} MATIC`);
 
-    // 3. Handle deposit if needed
+    // 4. Handle deposit if needed
     if (balance < cow.price) {
       const shortBy = cow.price - balance;
       console.log(`   ❗ Need ${ethers.formatEther(shortBy)} more MATIC`);
@@ -131,41 +136,28 @@ async function approveAdoption(cowId) {
       console.log(`   ✅ New Balance: ${ethers.formatEther(balance)} MATIC`);
     }
 
-    // 4. Approve adoption
+    // 5. First update Supabase status to "Approved"
+    await updateSupabaseStatus(cowId, "Approved");
+
+    // 6. Approve adoption on blockchain (will mint NFT)
     console.log('\n✍️ Approving on blockchain...');
     const tx = await contract.connect(adopter).approveAdoption(cowId);
     const receipt = await tx.wait();
     console.log(`   ✅ Tx Hash: ${receipt.hash}`);
 
-    // 5. Get IPFS data
+    // 7. Get IPFS data
     console.log('\n📦 Fetching IPFS metadata...');
     const metadata = await fetchIpfsMetadata(cow.ipfsHash);
     const ipfsImage = metadata?.image?.replace('ipfs://', '') || cow.ipfsHash;
     console.log(`   Used gateway: ${metadata.gatewayUsed}`);
 
-    // 6. Prepare data for Supabase
-    const cowData = {
-      id: cowId,
-      breed: cow.breed,
-      healthStatus: cow.healthStatus,
-      ipfsImage: ipfsImage,
-      ipfsMetadata: cow.ipfsHash,
-      priceInr: priceInInr,
-      priceMatic: priceInMatic,
-      status: "Registered",
-      farmerAddress: cow.farmerAddress,
-      adopterAddress: cow.adopterAddress,
-      transactionHash: receipt.hash
-    };
+    // 8. Final update to Supabase with Registered status and transaction hash
+    await updateSupabaseStatus(cowId, "Registered", receipt.hash);
 
-    // 7. Store in Supabase
-    console.log('\n💾 Saving to database...');
-    await storeCowInSupabase(cowData);
-
-    // 8. Final output
+    // 9. Final output
     console.log(`
-    🎉 Adoption Approved!
-    ====================
+    🎉 Adoption Approved and NFT Minted!
+    ==================================
     IPFS Links:
     Image: ${LOCAL_IPFS_GATEWAY}${ipfsImage}
     Metadata: ${LOCAL_IPFS_GATEWAY}${cow.ipfsHash}
@@ -181,6 +173,16 @@ async function approveAdoption(cowId) {
     };
   } catch (error) {
     console.error('\n❌ Approval Failed:', error.message);
+    
+    // If we failed after updating to Approved but before Registered,
+    // we should revert the status back to Pending
+    try {
+      await updateSupabaseStatus(cowId, "Pending");
+      console.log('⚠️ Reverted status back to Pending due to failure');
+    } catch (revertError) {
+      console.error('Failed to revert status:', revertError.message);
+    }
+    
     throw error;
   }
 }

@@ -3,8 +3,6 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract FarmerCowRegistry is ERC721, Ownable {
     enum AdoptionStatus { Pending, Approved, Rejected, Registered }
@@ -14,7 +12,8 @@ contract FarmerCowRegistry is ERC721, Ownable {
         string breed;
         uint256 birthDate;
         string healthStatus;
-        string ipfsHash;
+        string ipfsHashMetaData;
+        string ipfsImages;
         address farmerAddress;
         address adopterAddress;
         uint256 registrationTimestamp;
@@ -23,30 +22,28 @@ contract FarmerCowRegistry is ERC721, Ownable {
         AdoptionStatus status;
     }
 
-    // Mappings
     mapping(uint256 => Cow) private _cows;
-    mapping(address => uint256[]) private _pendingAdoptions;
-    mapping(address => uint256) private _gominiBalances;
-    
-    // Counter
     uint256 private _nextTokenId = 1;
 
-    // Events
-    event AdoptionRequested(uint256 indexed cowId, address farmer, address adopter);
+    event CowRegistered(
+        uint256 indexed cowId, 
+        address indexed farmer,
+        address indexed adopter,
+        string ipfsHashMetaData
+    );
+    event AdoptionRequested(uint256 indexed cowId, address adopter);
     event AdoptionApproved(uint256 indexed cowId, address adopter);
     event AdoptionRejected(uint256 indexed cowId, address adopter);
-    event CowRegistered(uint256 indexed cowId, address farmer);
-    event DepositMade(address indexed farmer, uint256 amount);
-    event WithdrawalMade(address indexed farmer, uint256 amount);
+    event AdoptionCanceled(uint256 indexed cowId, address adopter);
 
     constructor() ERC721("FarmerCowToken", "FCT") Ownable() {}
 
-    // Adoption Functions
-    function requestAdoption(
+    function registerCow(
         string memory breed,
         uint256 birthDate,
         string memory healthStatus,
-        string memory ipfsHash,
+        string memory ipfsHashMetaData,
+        string memory ipfsImages,
         string memory farmerTransactionId,
         uint256 price,
         address adopter
@@ -57,7 +54,8 @@ contract FarmerCowRegistry is ERC721, Ownable {
             breed: breed,
             birthDate: birthDate,
             healthStatus: healthStatus,
-            ipfsHash: ipfsHash,
+            ipfsHashMetaData: ipfsHashMetaData,
+            ipfsImages: ipfsImages,
             farmerAddress: msg.sender,
             adopterAddress: adopter,
             registrationTimestamp: 0,
@@ -66,8 +64,7 @@ contract FarmerCowRegistry is ERC721, Ownable {
             status: AdoptionStatus.Pending
         });
         
-        _pendingAdoptions[adopter].push(cowId);
-        emit AdoptionRequested(cowId, msg.sender, adopter);
+        emit AdoptionRequested(cowId, adopter);
         return cowId;
     }
 
@@ -76,7 +73,7 @@ contract FarmerCowRegistry is ERC721, Ownable {
         require(_cows[cowId].status == AdoptionStatus.Pending, "Invalid status");
         
         _cows[cowId].status = AdoptionStatus.Approved;
-        _registerCow(cowId);
+        _mintNFT(cowId);
         emit AdoptionApproved(cowId, msg.sender);
     }
 
@@ -88,54 +85,50 @@ contract FarmerCowRegistry is ERC721, Ownable {
         emit AdoptionRejected(cowId, msg.sender);
     }
 
-    // Registration Function
-    function _registerCow(uint256 cowId) private {
+    function cancelAdoption(uint256 cowId) external {
+        require(_cows[cowId].farmerAddress == msg.sender, "Not the farmer");
+        require(_cows[cowId].status == AdoptionStatus.Pending, "Invalid status");
+        
+        _cows[cowId].status = AdoptionStatus.Rejected;
+        emit AdoptionCanceled(cowId, _cows[cowId].adopterAddress);
+    }
+
+    function _mintNFT(uint256 cowId) private {
         Cow storage cow = _cows[cowId];
         require(cow.status == AdoptionStatus.Approved, "Not approved");
-        require(_gominiBalances[cow.farmerAddress] >= cow.price, "Insufficient balance");
 
-        _gominiBalances[cow.farmerAddress] -= cow.price;
         cow.registrationTimestamp = block.timestamp;
         cow.status = AdoptionStatus.Registered;
-        _safeMint(cow.farmerAddress, cowId);
+        _safeMint(cow.adopterAddress, cowId);
         
-        emit CowRegistered(cowId, cow.farmerAddress);
-    }
-
-    // Gomini Wallet Functions
-    function depositToGominiWallet() external payable {
-        require(msg.value > 0, "Amount must be > 0");
-        _gominiBalances[msg.sender] += msg.value;
-        emit DepositMade(msg.sender, msg.value);
-    }
-
-    function withdrawFromGominiWallet(uint256 amount) external {
-        require(amount > 0, "Amount must be > 0");
-        require(_gominiBalances[msg.sender] >= amount, "Insufficient balance");
-        
-        _gominiBalances[msg.sender] -= amount;
-        payable(msg.sender).transfer(amount);
-        emit WithdrawalMade(msg.sender, amount);
-    }
-
-    // View Functions
-    function getPendingAdoptions(address adopter) external view returns (uint256[] memory) {
-        return _pendingAdoptions[adopter];
+        emit CowRegistered(
+            cowId, 
+            cow.farmerAddress,
+            cow.adopterAddress,
+            cow.ipfsHashMetaData
+        );
     }
 
     function getCowDetails(uint256 cowId) external view returns (Cow memory) {
         return _cows[cowId];
     }
 
-    function getGominiBalance(address farmer) external view returns (uint256) {
-        return _gominiBalances[farmer];
-    }
+    function getCowsByStatus(AdoptionStatus status) external view returns (Cow[] memory) {
+        uint256 count = 0;
+        for (uint256 i = 1; i < _nextTokenId; i++) {
+            if (_cows[i].status == status) {
+                count++;
+            }
+        }
 
-    function cowExists(uint256 cowId) external view returns (bool) {
-        return _exists(cowId);
+        Cow[] memory result = new Cow[](count);
+        uint256 index = 0;
+        for (uint256 i = 1; i < _nextTokenId; i++) {
+            if (_cows[i].status == status) {
+                result[index] = _cows[i];
+                index++;
+            }
+        }
+        return result;
     }
-
-    // Fallback functions
-    receive() external payable {}
-    fallback() external payable {}
 }

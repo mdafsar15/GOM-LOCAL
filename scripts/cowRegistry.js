@@ -1,37 +1,22 @@
 const { ethers } = require("hardhat");
+const { createClient } = require('@supabase/supabase-js');
 const { create } = require('ipfs-http-client');
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 
-// Initialize IPFS client
+// Initialize clients
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
 const ipfs = create({
   host: 'localhost',
   port: 5001,
   protocol: 'http'
 });
 
-async function getMaticToInrRate() {
-  try {
-    const response = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=matic-network&vs_currencies=inr");
-    return response.data["matic-network"].inr;
-  } catch (error) {
-    console.error("Failed to fetch MATIC price, using fallback rate");
-    return 55; // Fallback rate (1 MATIC = ₹55)
-  }
-}
-
-async function convertInrToMatic(inrAmount) {
-  const maticToInr = await getMaticToInrRate();
-  const maticAmount = inrAmount / maticToInr;
-  return {
-    maticAmount: maticAmount.toString(),
-    maticInWei: ethers.parseEther(maticAmount.toString()),
-    exchangeRate: maticToInr
-  };
-}
-
-async function uploadToIPFS(filePath, cowDetails) {
+async function uploadToIPFS(filePath, cowData) {
   try {
     const fileContent = fs.readFileSync(filePath);
     const imageResult = await ipfs.add({
@@ -40,155 +25,111 @@ async function uploadToIPFS(filePath, cowDetails) {
     });
 
     const metadata = {
-      name: `Cow ${cowDetails.cowId}`,
+      name: `Cow ${cowData.breed}`,
       description: "Registered livestock information",
       image: `ipfs://${imageResult.cid}`,
       attributes: [
-        { trait_type: "Breed", value: cowDetails.breed },
-        { trait_type: "Birth Date", value: cowDetails.birthDate },
-        { trait_type: "Health Status", value: cowDetails.healthStatus },
-        { trait_type: "Price in INR", value: cowDetails.inrAmount },
-        { trait_type: "Price in MATIC", value: ethers.formatEther(cowDetails.price) }
+        { trait_type: "Breed", value: cowData.breed },
+        { trait_type: "Birth Date", value: cowData.birthDate },
+        { trait_type: "Health Status", value: cowData.healthStatus }
       ]
     };
 
-    const metadataResult = await ipfs.add({
-      path: `${cowDetails.cowId}_metadata.json`,
-      content: JSON.stringify(metadata)
-    });
-
+    const metadataResult = await ipfs.add(JSON.stringify(metadata));
     return {
-      imageCID: imageResult.cid.toString(),
-      metadataCID: metadataResult.cid.toString(),
-      imageURL: `http://localhost:8080/ipfs/${imageResult.cid}`,
-      metadataURL: `http://localhost:8080/ipfs/${metadataResult.cid}`
+      metadataCID: metadataResult.cid.toString()
     };
   } catch (error) {
-    console.error('IPFS upload failed:', error);
+    console.error("IPFS upload failed:", error);
     throw error;
   }
 }
 
-function getStatusName(statusCode) {
-  const statusMap = ["Pending", "Approved", "Rejected", "Registered"];
-  return statusMap[statusCode] || "Unknown";
-}
-
 async function getCowIdFromReceipt(contract, receipt) {
   try {
-    // Parse transaction logs to find the AdoptionRequested event
+    // Try to parse the CowRegistered event first
     const event = receipt.logs.map(log => {
       try {
         return contract.interface.parseLog(log);
-      } catch (e) {
+      } catch {
         return null;
       }
-    }).find(parsed => parsed?.name === "AdoptionRequested");
+    }).find(e => e?.name === "CowRegistered");
 
-    if (!event) {
-      throw new Error("AdoptionRequested event not found in transaction logs");
-    }
+    if (event) return event.args.cowId.toString();
 
-    return event.args.cowId.toString();
+    // Fallback: Check the contract's nextTokenId
+    console.log("Event not found, using fallback method");
+    return (await contract._nextTokenId()).toString();
   } catch (error) {
-    console.error("Failed to parse cowId from event:", error);
-    // Fallback to checking next token ID
-    const cowId = (await contract._nextTokenId()).toString();
-    console.log("Using fallback cowId:", cowId);
-    return cowId;
+    console.error("Failed to get cowId:", error);
+    throw error;
   }
 }
 
-async function main() {
+async function registerCow() {
   try {
-    const contractAddress = "0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690";
-    
-    // 1. Get signers
-    const signers = await ethers.getSigners();
-    const farmer = signers[0];
-    const adopter = signers[1] || farmer;
-    
-    console.log(`Farmer: ${farmer.address}`);
-    console.log(`Adopter: ${adopter.address}`);
-
+    const contractAddress = "0x1fA02b2d6A771842690194Cf62D91bdd92BfE28d";
+    const [farmer] = await ethers.getSigners();
     const contract = await ethers.getContractAt("FarmerCowRegistry", contractAddress);
 
-    // 2. Prepare cow data - Now accepting INR as input
-    const inrAmount = 100; // ₹400
-    const { maticAmount, maticInWei, exchangeRate } = await convertInrToMatic(inrAmount);
-
+    // Prepare cow data
     const cowData = {
-      cowId: "COW-" + Date.now(),
       breed: "Noida Desi",
-      birthDate: "2022-01-01",
+      birthDate: Math.floor(Date.now() / 1000),
       healthStatus: "Healthy",
-      farmerTransactionId: "TX-" + Date.now(),
-      price: maticInWei,
-      inrAmount: inrAmount.toString()
+      farmerTransactionId: `TX-${Date.now()}`,
+      price: ethers.parseEther("0.1"),
+      adopter: farmer.address
     };
 
-    // 3. Upload to IPFS
     console.log("Uploading cow data to IPFS...");
     const ipfsResult = await uploadToIPFS("./cow.jpg", cowData);
-    console.log("Image uploaded:", ipfsResult.imageURL);
 
-    // 4. Request adoption
-    console.log("Requesting adoption...");
-    console.log(`Price: ₹${inrAmount} (≈ ${maticAmount} MATIC @ ₹${exchangeRate}/MATIC)`);
-    
-    const tx = await contract.connect(farmer).requestAdoption(
+    console.log("Registering cow on blockchain...");
+    const tx = await contract.registerCow(
       cowData.breed,
-      Math.floor(new Date(cowData.birthDate)/1000),
+      cowData.birthDate,
       cowData.healthStatus,
       ipfsResult.metadataCID,
       cowData.farmerTransactionId,
       cowData.price,
-      adopter.address
+      cowData.adopter
     );
     const receipt = await tx.wait();
 
-    // 5. Get cowId from transaction
+    console.log("Transaction successful, getting cow ID...");
     const cowId = await getCowIdFromReceipt(contract, receipt);
-    console.log("Generated cowId:", cowId);
+
+    console.log("Saving to Supabase...");
+    const { error } = await supabase.from('cows').insert([{
+      id: cowId,
+      breed: cowData.breed,
+      health_status: cowData.healthStatus,
+      ipfs_hash: ipfsResult.metadataCID,
+      farmer_address: farmer.address,
+      adopter_address: cowData.adopter,
+      price: cowData.price.toString(),
+      status: 'Pending',
+      created_at: new Date().toISOString()
+    }]);
+
+    if (error) throw error;
 
     console.log(`
-      🐄 Adoption Requested!
-      --------------------------------
-      Cow ID: ${cowId}
-      Farmer: ${farmer.address}
-      Adopter: ${adopter.address}
-      Price: ₹${inrAmount} (≈ ${maticAmount} MATIC)
-      Status: Pending Approval
-      
-      📌 IPFS Links:
-      Metadata: ${ipfsResult.metadataURL}
-      Image: ${ipfsResult.imageURL}
-      
-      🔗 Transaction: https://mumbai.polygonscan.com/tx/${receipt.hash}
-      
-      Next Step: Adopter should run:
-      npx hardhat run scripts/approveAdoption.js --network polygonMumbai ${cowId}
+    🎉 Cow Registered Successfully!
+    =============================
+    Cow ID: ${cowId}
+    Farmer: ${farmer.address}
+    IPFS Metadata: ${ipfsResult.metadataCID}
+    Transaction: ${receipt.hash}
     `);
-
-    // 6. Save request details
-    const requestInfo = {
-      cowId,
-      farmer: farmer.address,
-      adopter: adopter.address,
-      price: {
-        inr: inrAmount,
-        matic: maticAmount,
-        exchangeRate: exchangeRate
-      },
-      ipfs: ipfsResult,
-      transactionHash: receipt.hash
-    };
-    fs.writeFileSync(`adoption-request-${cowId}.json`, JSON.stringify(requestInfo, null, 2));
-
+    
+    return cowId;
   } catch (error) {
-    console.error("Adoption request failed:", error.message);
+    console.error("\n❌ Registration Failed:", error.message);
     process.exit(1);
   }
 }
 
-main().then(() => process.exit(0));
+registerCow();
